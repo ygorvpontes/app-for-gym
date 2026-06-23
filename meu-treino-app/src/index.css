@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+    /* Evita o pull-to-refresh no topo e na base do app */
+    overscroll-behavior-y: none;
+    /* Bloqueia a seleção de texto para dar cara de app nativo */
+    -webkit-user-select: none;
+    user-select: none;
+    /* Evita aquele destaque azul ao clicar em botões no Android/iOS */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Permite que o usuário digite normalmente nos campos de cadastro e ficha */
+  input, textarea, select {
+    -webkit-user-select: auto;
+    user-select: auto;
+  }
+}
