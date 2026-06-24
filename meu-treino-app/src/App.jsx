@@ -39,9 +39,11 @@ function App() {
   
   const [activeFichaIndex, setActiveFichaIndex] = useState(0);
   const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(0);
+  
   const [sets, setSets] = useState(3);
   const [weight, setWeight] = useState(20);
   const [reps, setReps] = useState(10);
+  
   const [lastRecord, setLastRecord] = useState(null);
 
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -84,15 +86,16 @@ function App() {
     let fichaAtual = null;
 
     linhas.forEach(linha => {
-      const texto = linha.trim();
-      if (!texto) return;
+      let texto = linha.trim();
+      
+      if (!texto || !/[a-zA-Z0-9]/.test(texto)) return;
 
       if (texto.toLowerCase().startsWith('treino')) {
         let nomeTreino = texto.replace(/^treino[_\s]*/i, '').replace(/:$/, '').trim();
         fichaAtual = { nome: `Treino ${nomeTreino || 'Novo'}`, exercicios: [] };
         fichasLimpas.push(fichaAtual);
       } else if (fichaAtual) {
-        let linhaLimpa = texto.replace(/^[-•*]\s*/, '').trim();
+        let linhaLimpa = texto.replace(/^[-•*—_]+\s*/, '').trim();
         
         if (linhaLimpa.toLowerCase().startsWith('nota')) {
           if (fichaAtual.exercicios.length > 0) {
@@ -181,7 +184,6 @@ function App() {
     const fichasSalvas = userProfile.fichas || [];
     if (userProfile.hasOnboarded && fichasSalvas.length > 0) {
       const fichaAtual = fichasSalvas[activeFichaIndex];
-      // Blindagem na leitura do exercício atual
       const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
       
       if (exercicioAtual) {
@@ -216,14 +218,14 @@ function App() {
     const fichaAtual = userProfile.fichas[activeFichaIndex];
     const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
     
-    if (!exercicioAtual) return; // Segurança extra
+    if (!exercicioAtual) return; 
 
     const newSet = {
       id: crypto.randomUUID(),
       exercise: exercicioAtual.nome,
-      sets: sets,
-      weight: weight,
-      reps: reps,
+      sets: Number(sets) || 1,
+      weight: Number(weight) || 0,
+      reps: Number(reps) || 1,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -240,7 +242,6 @@ function App() {
     localStorage.clear(); window.location.reload();
   };
 
-  // === FUNÇÕES DO MODAL DE NOTA BLINDADAS ===
   const handleOpenNoteModal = () => {
     const fichaAtual = userProfile.fichas[activeFichaIndex];
     const exercAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
@@ -364,11 +365,10 @@ function App() {
     );
   }
 
-  // === RENDERIZAÇÃO DA TELA 3 (COM BLINDAGEM) ===
   const today = new Date().toISOString().split('T')[0];
   const todaysSets = workouts.find(w => w.date === today)?.sets || [];
   const fichaAtual = userProfile.fichas[activeFichaIndex];
-  const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex]; // Definido com segurança
+  const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
 
   return (
     <div className="flex min-h-screen flex-col p-4 pb-32 relative animate-fade-in">
@@ -453,29 +453,52 @@ function App() {
           </div>
         )}
 
-        <div className="mb-6 flex gap-2">
+        <div className="mb-6 flex gap-1 sm:gap-2">
+          {/* SÉRIES */}
           <div className="flex-1">
-            <label className="mb-2 block text-center text-xs font-semibold text-gray-400">Séries</label>
+            <label className="mb-2 block text-center text-[10px] sm:text-xs font-semibold text-gray-400">Séries</label>
             <div className="flex items-center justify-between rounded-xl bg-gray-800 p-1 sm:p-2">
-              <button onClick={() => setSets(s => Math.max(1, s - 1))} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">-</button>
-              <span className="text-xl font-bold text-gray-100">{sets}</span>
-              <button onClick={() => setSets(s => s + 1)} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">+</button>
+              <button onClick={() => setSets(s => Math.max(1, Number(s) - 1))} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">-</button>
+              <input 
+                type="number" 
+                value={sets} 
+                onChange={(e) => setSets(e.target.value)}
+                onBlur={(e) => setSets(Number(e.target.value) || 1)}
+                className="w-full bg-transparent text-center text-base font-bold text-gray-100 outline-none [appearance:textfield] sm:text-xl [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button onClick={() => setSets(s => Number(s) + 1)} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">+</button>
             </div>
           </div>
+          
+          {/* PESO */}
           <div className="flex-1">
-            <label className="mb-2 block text-center text-xs font-semibold text-gray-400">Peso (kg)</label>
+            <label className="mb-2 block text-center text-[10px] sm:text-xs font-semibold text-gray-400">Peso (kg)</label>
             <div className="flex items-center justify-between rounded-xl bg-gray-800 p-1 sm:p-2">
-              <button onClick={() => setWeight(w => Math.max(0, w - 1))} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">-</button>
-              <span className="text-xl font-bold text-gray-100">{weight}</span>
-              <button onClick={() => setWeight(w => w + 1)} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">+</button>
+              <button onClick={() => setWeight(w => Math.max(0, Number(w) - 1))} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">-</button>
+              <input 
+                type="number" 
+                value={weight} 
+                onChange={(e) => setWeight(e.target.value)}
+                onBlur={(e) => setWeight(Number(e.target.value) || 0)}
+                className="w-full bg-transparent text-center text-base font-bold text-gray-100 outline-none [appearance:textfield] sm:text-xl [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button onClick={() => setWeight(w => Number(w) + 1)} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">+</button>
             </div>
           </div>
+
+          {/* REPS */}
           <div className="flex-1">
-            <label className="mb-2 block text-center text-xs font-semibold text-gray-400">Reps</label>
+            <label className="mb-2 block text-center text-[10px] sm:text-xs font-semibold text-gray-400">Reps</label>
             <div className="flex items-center justify-between rounded-xl bg-gray-800 p-1 sm:p-2">
-              <button onClick={() => setReps(r => Math.max(0, r - 1))} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">-</button>
-              <span className="text-xl font-bold text-gray-100">{reps}</span>
-              <button onClick={() => setReps(r => r + 1)} className="flex h-12 w-10 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold active:bg-gray-600">+</button>
+              <button onClick={() => setReps(r => Math.max(0, Number(r) - 1))} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">-</button>
+              <input 
+                type="number" 
+                value={reps} 
+                onChange={(e) => setReps(e.target.value)}
+                onBlur={(e) => setReps(Number(e.target.value) || 0)}
+                className="w-full bg-transparent text-center text-base font-bold text-gray-100 outline-none [appearance:textfield] sm:text-xl [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button onClick={() => setReps(r => Number(r) + 1)} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-700 text-xl font-bold text-gray-300 transition-colors active:bg-gray-600 sm:h-12 sm:w-10">+</button>
             </div>
           </div>
         </div>
@@ -506,8 +529,6 @@ function App() {
       </section>
 
       <div className="fixed bottom-6 right-6 flex flex-col items-end gap-4 z-50">
-        
-        {/* LÊ COM SEGURANÇA SE A NOTA EXISTE */}
         <button 
           onClick={handleOpenNoteModal}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-800 border border-gray-700 text-xl font-bold shadow-xl transition-colors hover:bg-gray-700"
