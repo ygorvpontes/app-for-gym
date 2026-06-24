@@ -2,14 +2,38 @@ import { useState, useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 function App() {
+  // === ESTADO DO BOTÃO DE INSTALAÇÃO (Android/Windows) ===
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault(); 
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    
+    deferredPrompt.prompt();
+
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('MyWorkout instalado com sucesso!');
+    }
+    setDeferredPrompt(null);
+  };
+
   // === BANCO DE DADOS LOCAL ===
-  // Adicionamos os novos campos ao perfil do usuário
   const [userProfile, setUserProfile] = useLocalStorage('treino_user_profile', {
     name: '',
     age: '',
     weight: '',
-    goal: 'Hipertrofia', // valor padrão
-    experience: 'Iniciante', // valor padrão
+    goal: 'Hipertrofia', 
+    experience: 'Iniciante', 
     hasOnboarded: false,
     streak: 0,
     fichas: [] 
@@ -69,7 +93,6 @@ function App() {
   // === AÇÕES DO CADASTRO ===
   const handleSaveRegistration = () => {
     if (!regData.name.trim()) return alert("Por favor, preencha pelo menos o seu nome!");
-    // Salva os dados, mas mantém hasOnboarded como falso para forçar a criação da ficha
     setUserProfile({ ...userProfile, ...regData });
   };
 
@@ -107,7 +130,6 @@ function App() {
       }
     });
 
-    // Agora apenas marcamos como onboarded e salvamos as fichas (preservando o nome cadastrado)
     setUserProfile({ ...userProfile, hasOnboarded: true, fichas: fichasLimpas });
   };
 
@@ -186,7 +208,7 @@ function App() {
   };
 
   // ==========================================
-  // TELA 1: CADASTRO INICIAL (Novo!)
+  // TELA 1: CADASTRO INICIAL
   // ==========================================
   if (!userProfile.name) {
     return (
@@ -335,6 +357,22 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* BANNER DE INSTALAÇÃO NATIVA (Só aparece se puder instalar) */}
+      {deferredPrompt && (
+        <div className="mb-6 flex items-center justify-between rounded-xl bg-emerald-900/30 border border-emerald-800 p-4 animate-fade-in">
+          <div>
+            <h3 className="text-sm font-bold text-emerald-400">Instalar MyWorkout</h3>
+            <p className="text-xs text-emerald-200/70">Adicione à tela inicial para usar offline.</p>
+          </div>
+          <button 
+            onClick={handleInstallClick}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-lg active:bg-emerald-700"
+          >
+            Instalar
+          </button>
+        </div>
+      )}
 
       {/* ABAS DE TREINO */}
       <div className="mb-6 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
