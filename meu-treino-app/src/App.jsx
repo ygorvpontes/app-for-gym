@@ -34,7 +34,7 @@ function App() {
 
   const [setupMode, setSetupMode] = useState('escolha');
   const [importText, setImportText] = useState('');
-  const [appendMode, setAppendMode] = useState(false); // NOVO: Controle de mesclar treinos
+  const [appendMode, setAppendMode] = useState(false);
   const [manualFichas, setManualFichas] = useState([{ nome: 'Treino A', exercicios: [] }]);
   
   const [activeFichaIndex, setActiveFichaIndex] = useState(0);
@@ -42,7 +42,11 @@ function App() {
   const [sets, setSets] = useState(3);
   const [weight, setWeight] = useState(20);
   const [reps, setReps] = useState(10);
+  const [lastRecord, setLastRecord] = useState(null);
 
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [currentNoteText, setCurrentNoteText] = useState('');
+  
   const [timeLeft, setTimeLeft] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
   const [showTimerOptions, setShowTimerOptions] = useState(false);
@@ -72,7 +76,6 @@ function App() {
     setUserProfile({ ...userProfile, ...regData });
   };
 
-  // === MOTOR DO IMPORTADOR BLINDADO (v3.0) ===
   const handleImportarFicha = () => {
     if (!importText.trim()) return;
 
@@ -82,53 +85,54 @@ function App() {
 
     linhas.forEach(linha => {
       const texto = linha.trim();
-      if (!texto) return; // Ignora linhas vazias
+      if (!texto) return;
 
       if (texto.toLowerCase().startsWith('treino')) {
-        // Limpa nomes sujos tipo "Treino_peito, ombro e triceps:"
         let nomeTreino = texto.replace(/^treino[_\s]*/i, '').replace(/:$/, '').trim();
         fichaAtual = { nome: `Treino ${nomeTreino || 'Novo'}`, exercicios: [] };
         fichasLimpas.push(fichaAtual);
       } else if (fichaAtual) {
-        // Ignora bolinhas se existirem
         let linhaLimpa = texto.replace(/^[-•*]\s*/, '').trim();
-        let extractedSets = 3, extractedReps = 10;
         
-        // Padrão do seu amigo: "3 sérias progressão-35kg 4 reps"
+        if (linhaLimpa.toLowerCase().startsWith('nota')) {
+          if (fichaAtual.exercicios.length > 0) {
+            let textoNota = linhaLimpa.replace(/^notas?\s*:?\s*/i, '').trim();
+            fichaAtual.exercicios[fichaAtual.exercicios.length - 1].nota = textoNota || 'Observação...';
+          }
+          return; 
+        }
+
+        let extractedSets = 3, extractedReps = 10;
         const matchFriend = linhaLimpa.match(/(\d+)\s*s[ée]ri[ea]s.*?(\d+)\s*reps/i);
-        // Padrão antigo: "3x10"
         const matchX = linhaLimpa.match(/(\d+)\s*[xX]\s*([a-zA-Z0-9-]*)/);
 
         if (matchFriend) {
           extractedSets = parseInt(matchFriend[1]) || 3;
           extractedReps = parseInt(matchFriend[2]) || 10;
-          linhaLimpa = linhaLimpa.split(':')[0].trim(); // Pega só o que vem antes dos dois pontos
+          linhaLimpa = linhaLimpa.split(':')[0].trim(); 
         } else if (matchX) {
           extractedSets = parseInt(matchX[1]) || 1;
           const repString = matchX[2];
           extractedReps = parseInt(repString) || (repString.toLowerCase().includes('máx') ? 15 : 10);
           linhaLimpa = linhaLimpa.replace(matchX[0], '').trim();
         } else if (linhaLimpa.includes(':')) {
-          linhaLimpa = linhaLimpa.split(':')[0].trim(); // Fallback de limpeza
+          linhaLimpa = linhaLimpa.split(':')[0].trim(); 
         }
 
         linhaLimpa = linhaLimpa.replace(/[:—-]\s*$/, '').trim();
 
-        // Regra de saúde articular do Supino
         if (linhaLimpa.toLowerCase().includes('supino reto') && !linhaLimpa.toLowerCase().includes('halter')) {
           linhaLimpa = linhaLimpa.replace(/supino reto/ig, 'Supino Reto com Halteres');
         }
 
-        // Se sobrou algum texto válido, adiciona o exercício
         if (linhaLimpa.length > 2) {
-          fichaAtual.exercicios.push({ nome: linhaLimpa, defaultSets: extractedSets, defaultReps: extractedReps });
+          fichaAtual.exercicios.push({ nome: linhaLimpa, defaultSets: extractedSets, defaultReps: extractedReps, nota: '' });
         }
       }
     });
 
-    if (fichasLimpas.length === 0) return alert("Não encontrei nenhum treino válido. Certifique-se de começar o bloco com a palavra 'Treino'");
+    if (fichasLimpas.length === 0) return alert("Não encontrei nenhum treino válido.");
 
-    // Lógica de Mesclar ou Substituir
     let novasFichas = fichasLimpas;
     if (appendMode && userProfile.fichas && userProfile.fichas.length > 0) {
       novasFichas = [...userProfile.fichas, ...fichasLimpas];
@@ -146,7 +150,7 @@ function App() {
 
   const addExercicioManual = (fichaIndex) => {
     const novasFichas = [...manualFichas];
-    novasFichas[fichaIndex].exercicios.push({ nome: '', defaultSets: 3, defaultReps: 10 });
+    novasFichas[fichaIndex].exercicios.push({ nome: '', defaultSets: 3, defaultReps: 10, nota: '' });
     setManualFichas(novasFichas);
   };
 
@@ -177,19 +181,43 @@ function App() {
     const fichasSalvas = userProfile.fichas || [];
     if (userProfile.hasOnboarded && fichasSalvas.length > 0) {
       const fichaAtual = fichasSalvas[activeFichaIndex];
-      if (fichaAtual && fichaAtual.exercicios && fichaAtual.exercicios.length > selectedExerciseIndex) {
-        const exercicioAtual = fichaAtual.exercicios[selectedExerciseIndex];
+      // Blindagem na leitura do exercício atual
+      const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
+      
+      if (exercicioAtual) {
         setSets(exercicioAtual.defaultSets || 1);
         setReps(exercicioAtual.defaultReps || 10);
+
+        let foundRecord = null;
+        for (let i = workouts.length - 1; i >= 0; i--) {
+          const dayWorkout = workouts[i];
+          for (let j = dayWorkout.sets.length - 1; j >= 0; j--) {
+            if (dayWorkout.sets[j].exercise === exercicioAtual.nome) {
+              foundRecord = dayWorkout.sets[j];
+              break;
+            }
+          }
+          if (foundRecord) break;
+        }
+
+        if (foundRecord) {
+          setLastRecord(foundRecord);
+          setWeight(foundRecord.weight);
+        } else {
+          setLastRecord(null);
+          setWeight(20); 
+        }
       }
     }
-  }, [userProfile, activeFichaIndex, selectedExerciseIndex]);
+  }, [userProfile, activeFichaIndex, selectedExerciseIndex, workouts]);
 
   const handleSaveSet = () => {
     const today = new Date().toISOString().split('T')[0];
     const fichaAtual = userProfile.fichas[activeFichaIndex];
-    const exercicioAtual = fichaAtual.exercicios[selectedExerciseIndex];
+    const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
     
+    if (!exercicioAtual) return; // Segurança extra
+
     const newSet = {
       id: crypto.randomUUID(),
       exercise: exercicioAtual.nome,
@@ -210,6 +238,25 @@ function App() {
 
   const limparBanco = () => {
     localStorage.clear(); window.location.reload();
+  };
+
+  // === FUNÇÕES DO MODAL DE NOTA BLINDADAS ===
+  const handleOpenNoteModal = () => {
+    const fichaAtual = userProfile.fichas[activeFichaIndex];
+    const exercAtual = fichaAtual?.exercicios?.[selectedExerciseIndex];
+    if (!exercAtual) return;
+    
+    setCurrentNoteText(exercAtual.nota || '');
+    setShowNoteModal(true);
+  };
+
+  const handleSaveNote = () => {
+    const novasFichas = [...userProfile.fichas];
+    if (novasFichas[activeFichaIndex]?.exercicios?.[selectedExerciseIndex]) {
+      novasFichas[activeFichaIndex].exercicios[selectedExerciseIndex].nota = currentNoteText;
+      setUserProfile({ ...userProfile, fichas: novasFichas });
+    }
+    setShowNoteModal(false);
   };
 
   if (!userProfile.name) {
@@ -234,7 +281,7 @@ function App() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-bold text-gray-300">Objetivo Principal</label>
-            <select value={regData.goal} onChange={e => setRegData({...regData, goal: e.target.value})} className="w-full rounded-xl bg-gray-900 p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={regData.goal} onChange={e => setRegData({...regData, goal: e.target.value})} className="w-full rounded-xl bg-gray-900 p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none">
               <option value="Hipertrofia">Hipertrofia (Ganho de Massa)</option>
               <option value="Emagrecimento">Emagrecimento (Perda de Gordura)</option>
               <option value="Força">Ganho de Força</option>
@@ -243,7 +290,7 @@ function App() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-bold text-gray-300">Tempo de Treino</label>
-            <select value={regData.experience} onChange={e => setRegData({...regData, experience: e.target.value})} className="w-full rounded-xl bg-gray-900 p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={regData.experience} onChange={e => setRegData({...regData, experience: e.target.value})} className="w-full rounded-xl bg-gray-900 p-4 text-white outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none">
               <option value="Iniciante">Iniciante (0 a 6 meses)</option>
               <option value="Intermediário">Intermediário (6 meses a 2 anos)</option>
               <option value="Avançado">Avançado (+ 2 anos)</option>
@@ -274,10 +321,9 @@ function App() {
           <div className="w-full animate-fade-in flex flex-col text-left">
             <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Cole seu treino aqui..." className="mb-4 h-64 w-full rounded-xl bg-gray-900 p-4 text-sm text-gray-300 outline-none focus:ring-2 focus:ring-emerald-500" />
             
-            {/* O CHECKBOX MÁGICO AQUI */}
             <div className="mb-6 flex items-center gap-3 bg-gray-900 p-3 rounded-lg border border-gray-800">
               <input type="checkbox" id="appendMode" checked={appendMode} onChange={(e) => setAppendMode(e.target.checked)} className="h-5 w-5 rounded border-gray-700 bg-gray-800 text-emerald-500" />
-              <label htmlFor="appendMode" className="text-sm font-semibold text-gray-300">Adicionar à lista atual (Não apagar anteriores)</label>
+              <label htmlFor="appendMode" className="text-sm font-semibold text-gray-300">Adicionar à lista atual</label>
             </div>
 
             <button onClick={handleImportarFicha} className="mb-4 w-full rounded-lg bg-emerald-600 py-4 text-lg font-bold text-white active:bg-emerald-700">Processar e Salvar</button>
@@ -289,7 +335,7 @@ function App() {
           <div className="w-full animate-fade-in flex flex-col text-left">
             <div className="mb-6 flex items-center gap-3 bg-gray-900 p-3 rounded-lg border border-gray-800">
               <input type="checkbox" id="appendModeManual" checked={appendMode} onChange={(e) => setAppendMode(e.target.checked)} className="h-5 w-5 rounded border-gray-700 bg-gray-800 text-emerald-500" />
-              <label htmlFor="appendModeManual" className="text-sm font-semibold text-gray-300">Adicionar à lista atual (Não apagar anteriores)</label>
+              <label htmlFor="appendModeManual" className="text-sm font-semibold text-gray-300">Adicionar à lista atual</label>
             </div>
 
             {manualFichas.map((ficha, fIndex) => (
@@ -318,12 +364,34 @@ function App() {
     );
   }
 
+  // === RENDERIZAÇÃO DA TELA 3 (COM BLINDAGEM) ===
   const today = new Date().toISOString().split('T')[0];
   const todaysSets = workouts.find(w => w.date === today)?.sets || [];
   const fichaAtual = userProfile.fichas[activeFichaIndex];
+  const exercicioAtual = fichaAtual?.exercicios?.[selectedExerciseIndex]; // Definido com segurança
 
   return (
-    <div className="flex min-h-screen flex-col p-4 pb-24 relative animate-fade-in">
+    <div className="flex min-h-screen flex-col p-4 pb-32 relative animate-fade-in">
+      
+      {showNoteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 animate-fade-in backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-gray-900 p-6 shadow-2xl border border-gray-700">
+            <h3 className="mb-2 text-lg font-bold text-emerald-500">Notas do Exercício</h3>
+            <p className="mb-4 text-xs text-gray-400">{exercicioAtual?.nome}</p>
+            <textarea
+              value={currentNoteText}
+              onChange={(e) => setCurrentNoteText(e.target.value)}
+              placeholder="Ex: Focar na descida lenta, manter cotovelo fechado..."
+              className="mb-6 h-32 w-full rounded-xl bg-gray-800 p-4 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setShowNoteModal(false)} className="flex-1 rounded-xl bg-gray-800 py-3 font-bold text-gray-400 active:bg-gray-700">Cancelar</button>
+              <button onClick={handleSaveNote} className="flex-1 rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg active:bg-emerald-700">Salvar Nota</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="mb-6 flex items-center justify-between border-b border-gray-800 pb-4 pt-2">
         <div>
           <h1 className="text-xl font-bold text-emerald-500">Fala, {userProfile.name}!</h1>
@@ -351,11 +419,10 @@ function App() {
             {ficha.nome}
           </button>
         ))}
-        {/* Botão rápido para adicionar mais treinos na interface principal */}
         <button onClick={() => {
-          setUserProfile({...userProfile, hasOnboarded: false});
           setSetupMode('escolha');
           setAppendMode(true);
+          setUserProfile({...userProfile, hasOnboarded: false});
         }} className="whitespace-nowrap rounded-lg px-6 py-2 text-sm font-bold bg-gray-800 text-emerald-500 border border-emerald-900/50 hover:bg-gray-700">
           + Novo Treino
         </button>
@@ -364,11 +431,27 @@ function App() {
       <section className="mb-8 rounded-2xl bg-gray-900 p-4 shadow-lg">
         <label className="mb-2 block text-sm font-semibold text-gray-400">Exercício</label>
         
-        <select value={selectedExerciseIndex} onChange={(e) => setSelectedExerciseIndex(Number(e.target.value))} className="mb-6 w-full rounded-xl bg-gray-800 p-4 text-base text-gray-100 outline-none focus:ring-2 focus:ring-emerald-500">
-          {fichaAtual.exercicios.map((ex, idx) => (
-            <option key={idx} value={idx}>{ex.nome}</option>
-          ))}
-        </select>
+        <div className="relative mb-6 z-10">
+          <select 
+            value={selectedExerciseIndex} 
+            onChange={(e) => setSelectedExerciseIndex(Number(e.target.value))} 
+            className="w-full appearance-none rounded-xl bg-gray-800 p-4 pr-10 text-base text-gray-100 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+          >
+            {fichaAtual?.exercicios?.map((ex, idx) => (
+              <option key={idx} value={idx}>{ex.nome}</option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-emerald-500">
+            <svg className="h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          </div>
+        </div>
+
+        {lastRecord && (
+          <div className="mb-6 -mt-3 text-center text-xs font-semibold text-emerald-400/80 animate-fade-in flex items-center justify-center gap-2">
+            <span>💡</span>
+            Última marca: {lastRecord.weight} kg ({lastRecord.sets} séries x {lastRecord.reps} reps)
+          </div>
+        )}
 
         <div className="mb-6 flex gap-2">
           <div className="flex-1">
@@ -422,14 +505,24 @@ function App() {
         )}
       </section>
 
-      <div className="fixed bottom-6 right-6 flex flex-col items-end">
+      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-4 z-50">
+        
+        {/* LÊ COM SEGURANÇA SE A NOTA EXISTE */}
+        <button 
+          onClick={handleOpenNoteModal}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-800 border border-gray-700 text-xl font-bold shadow-xl transition-colors hover:bg-gray-700"
+        >
+          {exercicioAtual?.nota ? '📝' : '➕'}
+        </button>
+
         {showTimerOptions && (
-          <div className="mb-4 flex flex-col gap-2 rounded-xl bg-gray-800 p-3 shadow-lg animate-fade-in border border-gray-700">
+          <div className="flex flex-col gap-2 rounded-xl bg-gray-800 p-3 shadow-lg animate-fade-in border border-gray-700">
             <button onClick={() => startTimer(60)} className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-bold text-emerald-400 active:bg-gray-600">1:00 min</button>
             <button onClick={() => startTimer(90)} className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-bold text-emerald-400 active:bg-gray-600">1:30 min</button>
             <button onClick={() => startTimer(120)} className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-bold text-emerald-400 active:bg-gray-600">2:00 min</button>
           </div>
         )}
+        
         <button onClick={() => { if (timerActive) setTimerActive(false); else setShowTimerOptions(!showTimerOptions); }} className={`flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold shadow-xl transition-colors ${timerActive ? 'bg-orange-600 text-white animate-pulse shadow-orange-900/50' : 'bg-indigo-600 text-white shadow-indigo-900/50 hover:bg-indigo-500'}`}>
           {timerActive ? formatTime(timeLeft) : '⏱️'}
         </button>
